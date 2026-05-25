@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>🌿 上市公司溫室氣體排放視覺化</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -647,6 +648,7 @@ function drawPie(data) {
   const vals = [...top7.map(d => d.s1), ...(rest > 0 ? [rest] : [])];
   const colors = [...PIE_PALETTE.slice(0, 7), '#aaa'];
   buildPieLegend(data);
+  Chart.register(ChartDataLabels);
   pieChart = new Chart(ctx, {
     type: 'doughnut',
     data: {
@@ -654,21 +656,36 @@ function drawPie(data) {
       datasets: [{
         data: vals.map(v => +v.toFixed(1)),
         backgroundColor: colors,
-        borderColor: 'transparent',
-        borderWidth: 0,
-        hoverOffset: 6
+        borderColor: '#fff',
+        borderWidth: 2,
+        hoverOffset: 8
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      cutout: '58%',
+      cutout: '45%',
+      layout: { padding: 32 },
       plugins: {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            label: ctx => ` ${ctx.label}: ${(ctx.parsed/1000).toFixed(1)} 千噸 (${(ctx.parsed/total*100).toFixed(1)}%)`
+            label: ctx => ' ' + ctx.label + ': ' + (ctx.parsed/1000).toFixed(1) + ' 千囨 (' + (ctx.parsed/total*100).toFixed(1) + '%)'
           }
+        },
+        datalabels: {
+          display: ctx => (ctx.dataset.data[ctx.dataIndex] / total) >= 0.04,
+          color: '#fff',
+          font: { family: "Noto Sans TC, sans-serif", size: 11, weight: '600' },
+          textStrokeColor: 'rgba(0,0,0,0.3)',
+          textStrokeWidth: 2,
+          formatter: (value, ctx) => {
+            const pct = (value / total * 100).toFixed(1);
+            return ctx.chart.data.labels[ctx.dataIndex] + '\n' + pct + '%';
+          },
+          anchor: 'center',
+          align: 'center',
+          clamp: true
         }
       },
       animation: { animateRotate: true, duration: 600 }
@@ -758,16 +775,19 @@ function drawLine(data) {
 function drawSunburst(data) {
   const container = document.getElementById('sunburst-container');
   container.innerHTML = '';
-  const W = Math.min(container.clientWidth || 560, 480);
-  const H = W;
-  const radius = W / 2;
+
+  // Make the SVG wider to accommodate external labels
+  const PADDING = 110; // space reserved on each side for labels
+  const PIE_R = Math.min((container.clientWidth || 680) / 2 - PADDING, 200);
+  const W = (PIE_R + PADDING) * 2;
+  const H = (PIE_R + PADDING) * 2;
+
   const SCOPES = [
     { key: 's1', label: '範疇一', color: '#D85A30' },
     { key: 's2', label: '範疇二', color: '#1D9E75' },
     { key: 's3', label: '範疇三', color: '#378ADD' }
   ];
 
-  // Build hierarchy
   const root = {
     name: '排放總量',
     children: SCOPES.map(sc => ({
@@ -778,59 +798,142 @@ function drawSunburst(data) {
   };
 
   const hierarchy = d3.hierarchy(root).sum(d => d.value || 0);
-  const partition = d3.partition().size([2 * Math.PI, radius]);
+  const partition = d3.partition().size([2 * Math.PI, PIE_R]);
   partition(hierarchy);
 
   const arc = d3.arc()
     .startAngle(d => d.x0)
     .endAngle(d => d.x1)
-    .padAngle(0.012)
-    .padRadius(radius / 2)
+    .padAngle(0.01)
+    .padRadius(PIE_R / 2)
     .innerRadius(d => d.y0)
-    .outerRadius(d => d.y1 - 2);
+    .outerRadius(d => d.y1 - 1);
+
+  const arcMidline = d3.arc()
+    .startAngle(d => d.x0)
+    .endAngle(d => d.x1)
+    .innerRadius(d => (d.y0 + d.y1) / 2)
+    .outerRadius(d => (d.y0 + d.y1) / 2);
 
   const svg = d3.select(container).append('svg')
-    .attr('viewBox', `${-W/2} ${-H/2} ${W} ${H}`)
-    .attr('width', W).attr('height', H);
+    .attr('viewBox', (-W/2) + ' ' + (-H/2) + ' ' + W + ' ' + H)
+    .attr('width', '100%')
+    .style('max-width', W + 'px');
 
   const tip = document.getElementById('sunburst-tip');
 
-  svg.selectAll('path')
+  // ── Draw arcs ──
+  const arcG = svg.append('g');
+  arcG.selectAll('path')
     .data(hierarchy.descendants().filter(d => d.depth > 0))
     .join('path')
     .attr('d', arc)
     .attr('fill', d => {
       if (d.depth === 1) return d.data.color;
-      // inner ring: slightly lighter
-      return d3.color(d.parent.data.color).brighter(0.3 * (1 - d.value / d.parent.value)) || d.parent.data.color;
+      const base = d3.color(d.parent.data.color);
+      return base.brighter(0.5 * (1 - d.value / d.parent.value));
     })
-    .attr('opacity', d => d.depth === 1 ? 0.85 : 0.65)
-    .attr('stroke', 'rgba(255,255,255,0.4)')
-    .attr('stroke-width', 0.5)
+    .attr('opacity', d => d.depth === 1 ? 0.92 : 0.72)
+    .attr('stroke', 'rgba(255,255,255,0.6)')
+    .attr('stroke-width', d => d.depth === 1 ? 1.5 : 0.5)
     .style('cursor', 'pointer')
     .on('mouseover', function(event, d) {
-      d3.select(this).attr('opacity', 1);
-      const pct = d.parent ? (d.value / d.parent.value * 100).toFixed(1) : '—';
-      tip.innerHTML = `<strong>${d.data.name}</strong>：${(d.value/1000).toFixed(1)} 千噸 CO₂e (佔 ${pct}%)`;
+      d3.select(this).attr('opacity', 1).attr('stroke-width', 2);
+      const pct = d.parent ? (d.value / d.parent.value * 100).toFixed(1) : '-';
+      tip.innerHTML = '<strong>' + d.data.name + '</strong>：' + (d.value/1000).toFixed(1) + ' 千噸 CO₂e（佔 ' + pct + '%）';
     })
     .on('mouseleave', function(event, d) {
-      d3.select(this).attr('opacity', d.depth === 1 ? 0.85 : 0.65);
-      tip.innerHTML = '點擊扇形查看詳情';
+      d3.select(this).attr('opacity', d.depth === 1 ? 0.92 : 0.72).attr('stroke-width', d.depth === 1 ? 1.5 : 0.5);
+      tip.innerHTML = '游標懸停在扇形上查看詳情';
     });
 
-  // Center label
-  svg.append('text')
+  // ── Depth-1: scope labels inside ring, bold ──
+  svg.selectAll('text.scope-lbl')
+    .data(hierarchy.descendants().filter(d => d.depth === 1))
+    .join('text')
+    .attr('class', 'scope-lbl')
+    .attr('transform', d => {
+      const [x, y] = arcMidline.centroid(d);
+      return 'translate(' + x + ',' + y + ')';
+    })
     .attr('text-anchor', 'middle')
-    .attr('dy', '-0.3em')
-    .style('font-size', '12px')
-    .style('fill', '#3a5a46')
-    .text('三範疇');
-  svg.append('text')
-    .attr('text-anchor', 'middle')
-    .attr('dy', '1em')
-    .style('font-size', '11px')
-    .style('fill', '#7a9980')
-    .text('旭日圖');
+    .attr('dominant-baseline', 'middle')
+    .style('font-size', '13px')
+    .style('font-weight', '700')
+    .style('font-family', 'Noto Sans TC, sans-serif')
+    .style('fill', '#fff')
+    .style('text-shadow', '0 1px 4px rgba(0,0,0,0.5)')
+    .style('pointer-events', 'none')
+    .text(d => d.data.label);
+
+  // ── Depth-2: external labels with leader lines ──
+  const labelG = svg.append('g').attr('class', 'ext-labels');
+
+  const depth2 = hierarchy.descendants().filter(d => d.depth === 2);
+  const total = hierarchy.value;
+
+  depth2.forEach((d, i) => {
+    const angle = d.x1 - d.x0;
+    const arcLen = angle * PIE_R;
+    // Only label slices that are large enough (> ~2% of total or arcLen > 12px)
+    const pct = d.value / total;
+    if (pct < 0.018) return;
+
+    const midAngle = (d.x0 + d.x1) / 2 - Math.PI / 2;
+    const outerR = d.y1;
+
+    // Elbow points
+    const p1x = Math.cos(midAngle) * outerR;
+    const p1y = Math.sin(midAngle) * outerR;
+    const labelR = PIE_R + 22;
+    const p2x = Math.cos(midAngle) * labelR;
+    const p2y = Math.sin(midAngle) * labelR;
+    const labelEndR = PIE_R + 34;
+    const p3x = Math.cos(midAngle) * labelEndR + (p2x > 0 ? 10 : -10);
+    const p3y = Math.sin(midAngle) * labelEndR;
+
+    const isRight = p3x >= 0;
+    const textAnchor = isRight ? 'start' : 'end';
+    const textX = p3x + (isRight ? 4 : -4);
+
+    const lineColor = d.parent.data.color;
+
+    // Leader line
+    labelG.append('polyline')
+      .attr('points', p1x + ',' + p1y + ' ' + p2x + ',' + p2y + ' ' + p3x + ',' + p3y)
+      .attr('fill', 'none')
+      .attr('stroke', lineColor)
+      .attr('stroke-width', 1.2)
+      .attr('opacity', 0.7);
+
+    // Dot at arc edge
+    labelG.append('circle')
+      .attr('cx', p1x).attr('cy', p1y)
+      .attr('r', 2)
+      .attr('fill', lineColor)
+      .attr('opacity', 0.85);
+
+    // Company name text
+    labelG.append('text')
+      .attr('x', textX)
+      .attr('y', p3y)
+      .attr('text-anchor', textAnchor)
+      .attr('dominant-baseline', 'middle')
+      .style('font-size', '11px')
+      .style('font-weight', '500')
+      .style('font-family', 'Noto Sans TC, sans-serif')
+      .style('fill', lineColor)
+      .style('pointer-events', 'none')
+      .text(d.data.name);
+  });
+
+  // ── Center label ──
+  svg.append('text').attr('text-anchor', 'middle').attr('y', -10)
+    .style('font-size', '14px').style('font-weight', '700').style('fill', '#2d7a50')
+    .text('溫室氣體');
+  svg.append('text').attr('text-anchor', 'middle').attr('y', 8)
+    .style('font-size', '11px').style('fill', '#7a9980')
+    .text('排放結構');
 }
 
 // ── Slider ────────────────────────────────────────────────────────
