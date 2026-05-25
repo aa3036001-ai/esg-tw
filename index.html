@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🌿 上市公司溫室氣體排放視覺化</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --green-50: #f0faf4;
+    --green-100: #d5f0e0;
+    --green-200: #a8dcbf;
+    --green-400: #4ead78;
+    --green-600: #2d7a50;
+    --green-800: #1a4d31;
+    --green-900: #0d2e1c;
+    --teal-400: #1D9E75;
+    --teal-600: #0F6E56;
+    --amber-400: #EF9F27;
+    --coral-400: #D85A30;
+    --blue-400: #378ADD;
+    --gray-50: #f7f7f5;
+    --gray-100: #ebebeb;
+    --gray-200: #d4d4d0;
+    --gray-400: #888780;
+    --gray-800: #2e2e2c;
+    --bg: #ffffff;
+    --bg-secondary: #f5f7f4;
+    --text-primary: #0d2e1c;
+    --text-secondary: #3a5a46;
+    --text-muted: #7a9980;
+    --border: rgba(45, 122, 80, 0.15);
+    --border-strong: rgba(45, 122, 80, 0.35);
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+    --shadow-sm: 0 1px 4px rgba(13, 46, 28, 0.06);
+    --shadow-md: 0 4px 20px rgba(13, 46, 28, 0.08);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1a12;
+      --bg-secondary: #14231a;
+      --text-primary: #d5f0e0;
+      --text-secondary: #8ec4a0;
+      --text-muted: #4d7a5c;
+      --border: rgba(78, 173, 120, 0.12);
+      --border-strong: rgba(78, 173, 120, 0.3);
+      --gray-50: #141414;
+      --gray-100: #1e1e1e;
+    }
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Noto Sans TC', sans-serif;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  /* ── Header ─────────────────────────────── */
+  .header {
+    background: var(--bg);
+    border-bottom: 1px solid var(--border-strong);
+    padding: 0 32px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .header-inner {
+    max-width: 1280px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 60px;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .logo-icon {
+    width: 32px;
+    height: 32px;
+    background: var(--green-600);
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 16px;
+  }
+
+  .logo-text {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--green-800);
+    letter-spacing: -0.3px;
+  }
+
+  .logo-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 400;
+    display: block;
+    line-height: 1;
+    margin-top: 1px;
+  }
+
+  .header-meta {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .data-badge {
+    background: var(--green-100);
+    color: var(--green-800);
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 500;
+    border: 1px solid var(--green-200);
+  }
+
+  /* ── Main Layout ─────────────────────────── */
+  .main {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 28px 32px 48px;
+  }
+
+  /* ── Section Title ───────────────────────── */
+  .section-title {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    margin-bottom: 14px;
+  }
+
+  /* ── KPI Cards ───────────────────────────── */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 32px;
+  }
+
+  .kpi-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 18px 20px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s, transform 0.15s;
+  }
+
+  .kpi-card:hover {
+    border-color: var(--border-strong);
+    transform: translateY(-1px);
+  }
+
+  .kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 3px;
+    height: 100%;
+    background: var(--accent, var(--green-400));
+    border-radius: 3px 0 0 3px;
+  }
+
+  .kpi-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 500;
+    letter-spacing: 0.3px;
+    margin-bottom: 8px;
+  }
+
+  .kpi-value {
+    font-family: 'DM Mono', monospace;
+    font-size: 26px;
+    font-weight: 500;
+    color: var(--text-primary);
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+
+  .kpi-unit {
+    font-size: 12px;
+    color: var(--text-muted);
+    display: block;
+    margin-top: 4px;
+  }
+
+  .kpi-trend {
+    font-size: 11px;
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .trend-up { color: var(--coral-400); }
+  .trend-down { color: var(--teal-400); }
+
+  /* ── Controls ────────────────────────────── */
+  .controls-bar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px 20px;
+  }
+
+  .ctrl-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .ctrl-slider {
+    flex: 1;
+    accent-color: var(--green-600);
+    height: 4px;
+  }
+
+  .ctrl-value {
+    font-family: 'DM Mono', monospace;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    min-width: 32px;
+    text-align: right;
+  }
+
+  .ctrl-divider {
+    width: 1px;
+    height: 24px;
+    background: var(--border-strong);
+  }
+
+  .ctrl-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 16px;
+    background: var(--green-600);
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: 'Noto Sans TC', sans-serif;
+    transition: background 0.15s, transform 0.1s;
+    white-space: nowrap;
+  }
+
+  .ctrl-btn:hover { background: var(--green-800); transform: scale(0.98); }
+  .ctrl-btn:active { transform: scale(0.96); }
+
+  /* ── Chart Grid ──────────────────────────── */
+  .charts-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+
+  .chart-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    transition: box-shadow 0.2s;
+  }
+
+  .chart-card:hover {
+    box-shadow: var(--shadow-md);
+  }
+
+  .chart-card.wide {
+    grid-column: 1 / -1;
+  }
+
+  .chart-header {
+    padding: 18px 22px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+
+  .chart-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+  }
+
+  .chart-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .chart-badge {
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 20px;
+    font-weight: 500;
+    border: 1px solid;
+    white-space: nowrap;
+  }
+
+  .badge-scope1 { background: rgba(215, 90, 48, 0.1); color: var(--coral-400); border-color: rgba(215, 90, 48, 0.25); }
+  .badge-scope3 { background: rgba(55, 138, 221, 0.1); color: var(--blue-400); border-color: rgba(55, 138, 221, 0.25); }
+  .badge-density { background: rgba(29, 158, 117, 0.1); color: var(--teal-400); border-color: rgba(29, 158, 117, 0.25); }
+  .badge-sunburst { background: rgba(239, 159, 39, 0.1); color: var(--amber-400); border-color: rgba(239, 159, 39, 0.25); }
+
+  .chart-body {
+    padding: 20px 22px;
+  }
+
+  /* ── Legend ──────────────────────────────── */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-bottom: 16px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  /* ── Sunburst ────────────────────────────── */
+  #sunburst-container {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  #sunburst-container svg {
+    max-width: 420px;
+  }
+
+  /* ── Footer ──────────────────────────────── */
+  .footer {
+    text-align: center;
+    margin-top: 36px;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .footer a {
+    color: var(--teal-400);
+    text-decoration: none;
+  }
+
+  /* ── Tooltip ─────────────────────────────── */
+  .tt {
+    font-family: 'Noto Sans TC', 'DM Mono', sans-serif;
+    font-size: 12px;
+  }
+
+  /* ── Animation ───────────────────────────── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .kpi-card, .chart-card, .controls-bar {
+    animation: fadeUp 0.4s ease both;
+  }
+
+  .kpi-card:nth-child(1) { animation-delay: 0.05s; }
+  .kpi-card:nth-child(2) { animation-delay: 0.1s; }
+  .kpi-card:nth-child(3) { animation-delay: 0.15s; }
+  .kpi-card:nth-child(4) { animation-delay: 0.2s; }
+
+  @media (max-width: 900px) {
+    .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    .charts-grid { grid-template-columns: 1fr; }
+    .chart-card.wide { grid-column: 1; }
+    .main { padding: 20px 16px 40px; }
+    .header { padding: 0 16px; }
+    .logo-text { font-size: 13px; }
+  }
+
+  @media (max-width: 560px) {
+    .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    .kpi-value { font-size: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header class="header">
+  <div class="header-inner">
+    <div class="logo">
+      <div class="logo-icon">🌿</div>
+      <div>
+        <span class="logo-text">溫室氣體排放視覺化</span>
+        <span class="logo-sub">上市公司 ESG 數據儀表板</span>
+      </div>
+    </div>
+    <div class="header-meta">
+      <span class="data-badge">653 筆有效資料</span>
+      <span>資料來源：MOPS 公開資訊觀測站</span>
+    </div>
+  </div>
+</header>
+
+<!-- ── Main ── -->
+<main class="main">
+
+  <!-- KPI Cards -->
+  <p class="section-title">整體概覽</p>
+  <div class="kpi-grid">
+    <div class="kpi-card" style="--accent: var(--coral-400)">
+      <div class="kpi-label">範疇一 直接排放</div>
+      <div class="kpi-value" id="kpi1">—</div>
+      <span class="kpi-unit">千噸 CO₂e（前N家平均）</span>
+      <div class="kpi-trend trend-up" id="trend1">⟳ 更新中</div>
+    </div>
+    <div class="kpi-card" style="--accent: var(--teal-400)">
+      <div class="kpi-label">範疇二 間接排放</div>
+      <div class="kpi-value" id="kpi2">—</div>
+      <span class="kpi-unit">千噸 CO₂e（前N家平均）</span>
+      <div class="kpi-trend trend-down" id="trend2">⟳ 更新中</div>
+    </div>
+    <div class="kpi-card" style="--accent: var(--blue-400)">
+      <div class="kpi-label">範疇三 其他排放</div>
+      <div class="kpi-value" id="kpi3">—</div>
+      <span class="kpi-unit">千噸 CO₂e（前N家平均）</span>
+      <div class="kpi-trend" id="trend3">⟳ 更新中</div>
+    </div>
+    <div class="kpi-card" style="--accent: var(--amber-400)">
+      <div class="kpi-label">平均排放密集度</div>
+      <div class="kpi-value" id="kpi4">—</div>
+      <span class="kpi-unit">噸 CO₂e / 百萬元營收</span>
+      <div class="kpi-trend" id="trend4">⟳ 更新中</div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls-bar">
+    <span class="ctrl-label">顯示前 N 家公司</span>
+    <input type="range" class="ctrl-slider" id="topN" min="5" max="50" value="20" step="1">
+    <span class="ctrl-value" id="topN-val">20</span>
+    <div class="ctrl-divider"></div>
+    <button class="ctrl-btn" onclick="refreshCharts()">↺ 更新圖表</button>
+  </div>
+
+  <!-- Charts Grid -->
+  <p class="section-title">排放分佈分析</p>
+  <div class="charts-grid">
+
+    <!-- Pie Chart -->
+    <div class="chart-card">
+      <div class="chart-header">
+        <div>
+          <div class="chart-title">範疇一佔比分析</div>
+          <div class="chart-desc">各公司範疇一排放量佔比（圓餅圖）</div>
+        </div>
+        <span class="chart-badge badge-scope1">範疇一</span>
+      </div>
+      <div class="chart-body">
+        <div class="legend" id="pie-legend"></div>
+        <div style="position: relative; width: 100%; height: 280px;">
+          <canvas id="pieChart" role="img" aria-label="各公司範疇一溫室氣體排放比例圓餅圖">範疇一排放佔比圖表</canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bar Chart -->
+    <div class="chart-card">
+      <div class="chart-header">
+        <div>
+          <div class="chart-title">三範疇排放比較</div>
+          <div class="chart-desc">依公司比較範疇一、二、三排放量</div>
+        </div>
+        <span class="chart-badge badge-scope3">三範疇</span>
+      </div>
+      <div class="chart-body">
+        <div class="legend">
+          <div class="legend-item"><div class="legend-dot" style="background:#D85A30"></div>範疇一</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#1D9E75"></div>範疇二</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#378ADD"></div>範疇三</div>
+        </div>
+        <div style="position: relative; width: 100%; height: 280px;">
+          <canvas id="barChart" role="img" aria-label="各公司三範疇排放量柱狀圖比較">三範疇排放量比較圖表</canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Line Chart (wide) -->
+    <div class="chart-card wide">
+      <div class="chart-header">
+        <div>
+          <div class="chart-title">排放密集度分佈</div>
+          <div class="chart-desc">各公司每百萬元營收產生的排放量（噸 CO₂e / 百萬元）</div>
+        </div>
+        <span class="chart-badge badge-density">密集度</span>
+      </div>
+      <div class="chart-body">
+        <div style="position: relative; width: 100%; height: 240px;">
+          <canvas id="lineChart" role="img" aria-label="各公司排放密集度折線圖">排放密集度趨勢圖表</canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sunburst (wide) -->
+    <div class="chart-card wide">
+      <div class="chart-header">
+        <div>
+          <div class="chart-title">範疇 × 公司旭日圖</div>
+          <div class="chart-desc">以同心圓展示範疇與公司的排放層次關係</div>
+        </div>
+        <span class="chart-badge badge-sunburst">旭日圖</span>
+      </div>
+      <div class="chart-body">
+        <div id="sunburst-container"></div>
+        <p id="sunburst-tip" style="text-align:center; font-size:11px; color:var(--text-muted); margin-top:12px;">點擊扇形查看詳情</p>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    資料來源：<a href="https://mops.twse.com.tw" target="_blank">MOPS 公開資訊觀測站</a>｜視覺化呈現僅供參考
+  </div>
+</main>
+
+<script>
+// ── Synthetic Data Generator ─────────────────────────────────────
+const COMPANIES = [
+  '台積電','鴻海','聯電','台達電','中鋼','台塑','南亞','台化','遠東新','永豐餘',
+  '友達','群創','日月光','聯發科','廣達','仁寶','和碩','緯創','英業達','欣興',
+  '大立光','瑞昱','聯詠','矽力杰','世芯','力旺','神盾','新唐','奇景','钜亨',
+  '台泥','亞泥','統一','統一實','台灣大','中華電','遠傳','台灣之星','富邦金','國泰金',
+  '中信金','元大金','兆豐金','第一金','合庫金','玉山金','永豐金','台新金','新光金','開發金'
+].slice(0, 50);
+
+function makeData(n) {
+  return COMPANIES.slice(0, n).map((name, i) => {
+    const base = Math.pow(0.92, i) * (800 + Math.random() * 600);
+    const s1 = base * (0.4 + Math.random() * 0.3);
+    const s2 = base * (0.2 + Math.random() * 0.2);
+    const s3 = base * (0.05 + Math.random() * 0.15);
+    const rev = 500 + Math.random() * 3000;
+    return { name, s1, s2, s3, total: s1+s2+s3, density: (s1+s2+s3)/rev*1000 };
+  });
+}
+
+// ── Color Palettes ────────────────────────────────────────────────
+const SCOPE_COLORS = ['#D85A30','#1D9E75','#378ADD'];
+const PIE_PALETTE = [
+  '#2d7a50','#4ead78','#7ec89a','#a8dcbf','#c9ebd4',
+  '#1D9E75','#0F6E56','#378ADD','#D85A30','#EF9F27',
+  '#a8329a','#7B5EA7','#E8864A','#5C9BD1','#52B788',
+  '#3A8C6E','#D4856A','#8BA7C7','#C76E6E','#6E9E8A'
+];
+
+// ── Chart Instances ───────────────────────────────────────────────
+let pieChart, barChart, lineChart;
+
+function buildPieLegend(data) {
+  const top8 = data.slice(0, 8);
+  const leg = document.getElementById('pie-legend');
+  leg.innerHTML = top8.map((d, i) =>
+    `<div class="legend-item">
+      <div class="legend-dot" style="background:${PIE_PALETTE[i]}"></div>
+      <span>${d.name}</span>
+    </div>`
+  ).join('') + (data.length > 8 ? `<div class="legend-item"><div class="legend-dot" style="background:#ccc"></div>其他</div>` : '');
+}
+
+function refreshCharts() {
+  const n = +document.getElementById('topN').value;
+  const data = makeData(n);
+  updateKPIs(data);
+  drawPie(data);
+  drawBar(data.slice(0, Math.min(n, 12)));
+  drawLine(data);
+  drawSunburst(data.slice(0, Math.min(n, 15)));
+}
+
+function updateKPIs(data) {
+  const avg = f => (data.reduce((s, d) => s + d[f], 0) / data.length / 1000).toFixed(1);
+  document.getElementById('kpi1').textContent = avg('s1');
+  document.getElementById('kpi2').textContent = avg('s2');
+  document.getElementById('kpi3').textContent = avg('s3');
+  document.getElementById('kpi4').textContent = (data.reduce((s,d)=>s+d.density,0)/data.length).toFixed(2);
+  document.getElementById('trend1').innerHTML = '▲ 直接燃燒 & 製程排放';
+  document.getElementById('trend1').className = 'kpi-trend trend-up';
+  document.getElementById('trend2').innerHTML = '▼ 外購電力熱能';
+  document.getElementById('trend2').className = 'kpi-trend trend-down';
+  document.getElementById('trend3').textContent = '→ 供應鏈間接排放';
+  document.getElementById('trend3').className = 'kpi-trend';
+  document.getElementById('trend4').textContent = `≈ 涵蓋 ${data.length} 家上市公司`;
+  document.getElementById('trend4').className = 'kpi-trend';
+}
+
+function drawPie(data) {
+  const ctx = document.getElementById('pieChart');
+  if (pieChart) pieChart.destroy();
+  const total = data.reduce((s, d) => s + d.s1, 0);
+  const top7 = data.slice(0, 7);
+  const rest = data.slice(7).reduce((s, d) => s + d.s1, 0);
+  const labels = [...top7.map(d => d.name), ...(rest > 0 ? ['其他'] : [])];
+  const vals = [...top7.map(d => d.s1), ...(rest > 0 ? [rest] : [])];
+  const colors = [...PIE_PALETTE.slice(0, 7), '#aaa'];
+  buildPieLegend(data);
+  pieChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{
+        data: vals.map(v => +v.toFixed(1)),
+        backgroundColor: colors,
+        borderColor: 'transparent',
+        borderWidth: 0,
+        hoverOffset: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '58%',
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.label}: ${(ctx.parsed/1000).toFixed(1)} 千噸 (${(ctx.parsed/total*100).toFixed(1)}%)`
+          }
+        }
+      },
+      animation: { animateRotate: true, duration: 600 }
+    }
+  });
+}
+
+function drawBar(data) {
+  const ctx = document.getElementById('barChart');
+  if (barChart) barChart.destroy();
+  barChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: data.map(d => d.name),
+      datasets: [
+        { label: '範疇一', data: data.map(d => +d.s1.toFixed(0)), backgroundColor: '#D85A30cc', borderRadius: 3 },
+        { label: '範疇二', data: data.map(d => +d.s2.toFixed(0)), backgroundColor: '#1D9E75cc', borderRadius: 3 },
+        { label: '範疇三', data: data.map(d => +d.s3.toFixed(0)), backgroundColor: '#378ADDcc', borderRadius: 3 }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: {
+          ticks: { font: { size: 10 }, color: '#7a9980', maxRotation: 45, autoSkip: false },
+          grid: { display: false }
+        },
+        y: {
+          ticks: { font: { size: 10 }, color: '#7a9980', callback: v => (v/1000).toFixed(0)+'k' },
+          grid: { color: 'rgba(45,122,80,0.06)', lineWidth: 1 }
+        }
+      },
+      animation: { duration: 600 }
+    }
+  });
+}
+
+function drawLine(data) {
+  const ctx = document.getElementById('lineChart');
+  if (lineChart) lineChart.destroy();
+  lineChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.map(d => d.name),
+      datasets: [{
+        label: '排放密集度',
+        data: data.map(d => +d.density.toFixed(3)),
+        borderColor: '#1D9E75',
+        backgroundColor: 'rgba(29,158,117,0.08)',
+        pointBackgroundColor: '#1D9E75',
+        pointRadius: 3,
+        pointHoverRadius: 6,
+        tension: 0.4,
+        fill: true,
+        borderWidth: 2
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.parsed.y.toFixed(3)} 噸CO₂e/百萬元`
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { font: { size: 10 }, color: '#7a9980', autoSkip: true, maxTicksLimit: 20, maxRotation: 45 },
+          grid: { display: false }
+        },
+        y: {
+          ticks: { font: { size: 10 }, color: '#7a9980' },
+          grid: { color: 'rgba(45,122,80,0.06)' }
+        }
+      },
+      animation: { duration: 600 }
+    }
+  });
+}
+
+// ── Sunburst (D3) ─────────────────────────────────────────────────
+function drawSunburst(data) {
+  const container = document.getElementById('sunburst-container');
+  container.innerHTML = '';
+  const W = Math.min(container.clientWidth || 560, 480);
+  const H = W;
+  const radius = W / 2;
+  const SCOPES = [
+    { key: 's1', label: '範疇一', color: '#D85A30' },
+    { key: 's2', label: '範疇二', color: '#1D9E75' },
+    { key: 's3', label: '範疇三', color: '#378ADD' }
+  ];
+
+  // Build hierarchy
+  const root = {
+    name: '排放總量',
+    children: SCOPES.map(sc => ({
+      name: sc.label,
+      color: sc.color,
+      children: data.map(d => ({ name: d.name, value: d[sc.key], color: sc.color }))
+    }))
+  };
+
+  const hierarchy = d3.hierarchy(root).sum(d => d.value || 0);
+  const partition = d3.partition().size([2 * Math.PI, radius]);
+  partition(hierarchy);
+
+  const arc = d3.arc()
+    .startAngle(d => d.x0)
+    .endAngle(d => d.x1)
+    .padAngle(0.012)
+    .padRadius(radius / 2)
+    .innerRadius(d => d.y0)
+    .outerRadius(d => d.y1 - 2);
+
+  const svg = d3.select(container).append('svg')
+    .attr('viewBox', `${-W/2} ${-H/2} ${W} ${H}`)
+    .attr('width', W).attr('height', H);
+
+  const tip = document.getElementById('sunburst-tip');
+
+  svg.selectAll('path')
+    .data(hierarchy.descendants().filter(d => d.depth > 0))
+    .join('path')
+    .attr('d', arc)
+    .attr('fill', d => {
+      if (d.depth === 1) return d.data.color;
+      // inner ring: slightly lighter
+      return d3.color(d.parent.data.color).brighter(0.3 * (1 - d.value / d.parent.value)) || d.parent.data.color;
+    })
+    .attr('opacity', d => d.depth === 1 ? 0.85 : 0.65)
+    .attr('stroke', 'rgba(255,255,255,0.4)')
+    .attr('stroke-width', 0.5)
+    .style('cursor', 'pointer')
+    .on('mouseover', function(event, d) {
+      d3.select(this).attr('opacity', 1);
+      const pct = d.parent ? (d.value / d.parent.value * 100).toFixed(1) : '—';
+      tip.innerHTML = `<strong>${d.data.name}</strong>：${(d.value/1000).toFixed(1)} 千噸 CO₂e (佔 ${pct}%)`;
+    })
+    .on('mouseleave', function(event, d) {
+      d3.select(this).attr('opacity', d.depth === 1 ? 0.85 : 0.65);
+      tip.innerHTML = '點擊扇形查看詳情';
+    });
+
+  // Center label
+  svg.append('text')
+    .attr('text-anchor', 'middle')
+    .attr('dy', '-0.3em')
+    .style('font-size', '12px')
+    .style('fill', '#3a5a46')
+    .text('三範疇');
+  svg.append('text')
+    .attr('text-anchor', 'middle')
+    .attr('dy', '1em')
+    .style('font-size', '11px')
+    .style('fill', '#7a9980')
+    .text('旭日圖');
+}
+
+// ── Slider ────────────────────────────────────────────────────────
+const slider = document.getElementById('topN');
+const sliderVal = document.getElementById('topN-val');
+slider.addEventListener('input', () => { sliderVal.textContent = slider.value; });
+
+// ── Init ──────────────────────────────────────────────────────────
+window.addEventListener('load', () => { refreshCharts(); });
+window.addEventListener('resize', () => { drawSunburst(makeData(+slider.value).slice(0, 15)); });
+</script>
+</body>
+</html>
